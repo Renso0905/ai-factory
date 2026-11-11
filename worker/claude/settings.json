@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(.github/**)",
+      "Write(.github/**)",
+      "Edit(factory.config.json)",
+      "Write(factory.config.json)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh api:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh repo edit:*)",
+      "Bash(gh ruleset:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)"
+    ]
+  }
+}

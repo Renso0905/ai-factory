@@ -1,0 +1,66 @@
+# Shared quality-control pipeline for project repositories ("mini-factories").
+# Projects call it with:
+#   jobs:
+#     factory:
+#       uses: Renso0905/ai-factory/.github/workflows/project-ci.yml@v1
+# The resulting checks are named "factory / quality" and "factory / policy".
+name: Project CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version used to build and test the project.
+        type: string
+        default: '24'
+      factory-ref:
+        description: Factory ref the policy scripts are loaded from. Keep equal to the ref this workflow is called at.
+        type: string
+        default: v1
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs the project's own code. Treated as untrusted: read-only token, no secrets.
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --if-present
+      - run: npm run lint --if-present
+      - run: npm test
+      - run: npm run build --if-present
+
+  # Runs factory code against the project's files. Project code is never executed here.
+  policy:
+    name: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: project
+          persist-credentials: false
+      - name: Check out factory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Renso0905/ai-factory
+          ref: ${{ inputs.factory-ref }}
+          path: factory
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Factory policy check
+        run: node factory/scripts/policy-check.ts --target project --mode project

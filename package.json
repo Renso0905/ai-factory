@@ -1,0 +1,19 @@
+{
+  "name": "ai-factory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Central AI software factory: shared workflows, policies and validation scripts.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"scripts/**/*.test.ts\"",
+    "policy:self": "node scripts/policy-check.ts --target . --mode factory"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
