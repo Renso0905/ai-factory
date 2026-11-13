@@ -5,6 +5,7 @@ const PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'GitHub fine-grained token', re: /\bgithub_pat_[A-Za-z0-9_]{50,}\b/ },
   { name: 'Anthropic API key', re: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
   { name: 'AWS access key id', re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { name: 'private key', re: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },
 ];
 

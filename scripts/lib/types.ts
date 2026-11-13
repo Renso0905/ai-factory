@@ -15,4 +15,6 @@ export interface PolicyOptions {
   mode: Mode;
   /** owner/name of the central factory, e.g. Renso0905/ai-factory. */
   factoryRepo: string;
+  /** Commit the change is compared with for append-only rules (R001). Omitted: R001 is not run. */
+  base?: string;
 }
