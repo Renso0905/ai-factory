@@ -23,6 +23,13 @@ Rules with an id are checked by `scripts/policy-check.ts` and fail the
 
 Research records are described in `RESEARCH.md`.
 
+The research pipeline also runs `scripts/research-guard.ts` after every agent
+step. Its findings fail that step, not the `policy` job:
+
+| Id | Rule |
+| --- | --- |
+| G001 | An agent step may only add files to its own study, only record types its role may write, only evidence authored by its role, only claims and reviews for the current round, and only url evidence whose url and sha256 match a retrieval logged by `research-fetch.ts` in the same step. Nothing existing may change |
+
 `factory.config.json` example: files under `src/lib` may not import React.
 
 ```json

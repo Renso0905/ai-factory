@@ -12,10 +12,13 @@ First project: [gym-app](https://github.com/Renso0905/gym-app).
 | Path | Purpose |
 | --- | --- |
 | `.github/workflows/project-ci.yml` | Reusable pipeline projects call: build, typecheck, test, policy check |
+| `.github/workflows/research.yml` | Reusable market-research pipeline: researcher and reviewer agents, started by hand (`docs/RESEARCH.md`) |
 | `.github/workflows/ci.yml` | The factory's own tests |
 | `scripts/policy-check.ts` | Security and architecture validation (rules in `docs/STANDARDS.md`) |
 | `scripts/lib/` | Policy rules and their tests |
 | `worker/claude/` | AI developer instructions and denied-permission settings for projects |
+| `worker/research/` | Researcher and reviewer agent instructions |
+| `scripts/research-*.ts`, `scripts/research/` | Source fetch tool, research guard and agent runner |
 | `docs/` | Architecture, standards, governance, versioning, acceptance evidence |
 
 ## Using the factory from a project
