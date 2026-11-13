@@ -1,5 +1,5 @@
 // Factory policy check CLI.
-// Usage: node scripts/policy-check.ts --target <dir> --mode project|factory [--factory-repo owner/name]
+// Usage: node scripts/policy-check.ts --target <dir> --mode project|factory [--factory-repo owner/name] [--base <sha>]
 import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -11,8 +11,12 @@ const { values } = parseArgs({
     target: { type: 'string', default: '.' },
     mode: { type: 'string', default: 'project' },
     'factory-repo': { type: 'string', default: 'Renso0905/ai-factory' },
+    // Commit to compare HEAD with for the append-only research rule (R001). Empty or all zeros: skipped.
+    base: { type: 'string', default: '' },
   },
 });
+
+const base = /^0+$/.test(values.base) ? '' : values.base;
 
 if (values.mode !== 'project' && values.mode !== 'factory') {
   console.error(`Unknown --mode "${values.mode}" (expected project or factory).`);
@@ -23,6 +27,7 @@ const findings = runPolicy({
   target: resolve(values.target),
   mode: values.mode as Mode,
   factoryRepo: values['factory-repo'],
+  ...(base ? { base } : {}),
 });
 
 const inActions = process.env.GITHUB_ACTIONS === 'true';

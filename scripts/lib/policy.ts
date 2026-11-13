@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkAppendOnlyInGit } from './append-only.ts';
 import { checkBoundariesInText, parseBoundaries } from './boundaries.ts';
+import { checkResearch } from './research.ts';
 import type { Boundary } from './boundaries.ts';
 import { readText, walk } from './files.ts';
 import { checkSecretFileName, checkSecretsInText } from './secrets.ts';
@@ -53,6 +55,9 @@ export function runPolicy(opts: PolicyOptions): Finding[] {
       if (callsFactoryCi(text, factoryRepo)) callsFactory = true;
     }
   }
+
+  findings.push(...checkResearch(files, (file) => readText(target, file)));
+  if (opts.base) findings.push(...checkAppendOnlyInGit(target, opts.base));
 
   if (mode === 'project' && !callsFactory) {
     findings.push({ rule: 'P002', file: '.github/workflows', message: `No workflow calls ${factoryRepo}/.github/workflows/project-ci.yml.` });

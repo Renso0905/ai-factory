@@ -52,6 +52,8 @@ jobs:
         with:
           path: project
           persist-credentials: false
+          # Full history so the append-only research rule (R001) can compare with the base commit.
+          fetch-depth: 0
       - name: Check out factory
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,4 +65,7 @@ jobs:
         with:
           node-version: '24'
       - name: Factory policy check
-        run: node factory/scripts/policy-check.ts --target project --mode project
+        env:
+          # Pull requests compare with their base; pushes with the previous tip. Empty or zeros skips R001.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node factory/scripts/policy-check.ts --target project --mode project --base "$BASE_SHA"

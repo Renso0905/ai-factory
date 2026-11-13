@@ -51,6 +51,15 @@ workflow does not help: a required check that never reports blocks the merge.
 | Operations | Deferred, except a `production` environment gate in `gym-app` |
 | Monitoring | GitHub Actions run history only |
 
+## Market intelligence
+
+A separate capability from quality control: a researcher agent compares a
+feature with competitors, and a reviewer agent checks each claim against its
+own evidence. Studies live in the project under `research/` and are advisory.
+They never run on every commit and never block routine CI. The policy check
+only ensures the records are well formed and append-only (R001 to R003). See
+`RESEARCH.md`.
+
 ## Adding a project
 
 1. Create the repository with a `package-lock.json`, `npm test`, and the

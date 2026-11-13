@@ -13,10 +13,15 @@ Rules with an id are checked by `scripts/policy-check.ts` and fail the
 | W002 | `pull_request_target` is not used |
 | W003 | Every workflow declares a top-level `permissions` block |
 | W004 | `permissions: write-all` is not used |
-| S001 | No credential-shaped content (GitHub, Anthropic, AWS tokens, private keys) |
+| S001 | No credential-shaped content (GitHub, Anthropic, AWS, Google API keys, private keys) |
 | S002 | No `.env*` (except `.env.example`), `.pem`, `.p12`, `.pfx` or `.key` files |
 | A001 | No import that breaks a boundary declared in the project's `factory.config.json` |
 | A002 | `factory.config.json`, when present, is valid |
+| R001 | Research records are append-only: a change may add files under `research/` but not modify, delete or rename them. Runs when the policy check is given `--base` |
+| R002 | Every file under `research/` is a recognised record with valid fields; claims carry no verdict; excerpts are at most 300 characters |
+| R003 | Records in a study reference each other correctly: a contract exists, cited evidence and claim versions exist, `established`/`contradicted` cite the reviewer's own evidence, review rounds stay within the contract |
+
+Research records are described in `RESEARCH.md`.
 
 `factory.config.json` example: files under `src/lib` may not import React.
 

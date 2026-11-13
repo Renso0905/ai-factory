@@ -45,4 +45,11 @@ requests), then require one approving review and code-owner review.
 
 - V1 uses no paid service. Public repositories run Actions for free.
 - No API key is stored anywhere. Adding one is a sensitive change.
+- AI agents run only on the owner's existing subscriptions or on free tiers
+  that cannot bill: Claude through a subscription token
+  (`claude setup-token`, with extra usage turned off on the account), and
+  Gemini through a free-tier key from a Google Cloud project with no billing
+  account. When a quota runs out, the run fails; it never moves to
+  pay-per-token billing. A paid API key or plan needs the owner's explicit
+  approval.
 - Every job has a timeout. The worker stops after 3 failed attempts per check.
