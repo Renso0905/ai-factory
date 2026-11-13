@@ -12,7 +12,8 @@
 #         claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 #         gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
 #
-# Researcher (Claude) and reviewer (Gemini via Antigravity CLI) take turns:
+# Researcher (Claude) and reviewer (Gemini via Antigravity CLI, or Claude when
+# the owner picks reviewer-agent: claude for a run) take turns:
 # research -> review 1 -> respond -> review 2 -> report (round 2 only when the
 # contract allows two rounds). A run can resume from the saved study of an
 # earlier run at a chosen step, so a failed step is retried without repeating
@@ -32,8 +33,12 @@ on:
         description: Claude model for the researcher.
         type: string
         default: claude-opus-5-5
+      reviewer-agent:
+        description: Who reviews. gemini (independent, the default) or claude (fallback when Gemini is unavailable; same model family as the researcher, so the review is not independent).
+        type: string
+        default: gemini
       reviewer-model:
-        description: Antigravity model id for the reviewer, as listed by `agy models` (for example gemini-3.8-flash-medium).
+        description: Antigravity model id for a Gemini reviewer, as listed by `agy models` (for example gemini-3.8-flash-medium). A Claude reviewer uses researcher-model.
         type: string
         default: gemini-3.8-flash-medium
       resume-run:
@@ -193,8 +198,11 @@ jobs:
           FACTORY: ${{ github.workspace }}/factory
           PROJECT: ${{ github.workspace }}/project
           SNAPSHOTS: ${{ runner.temp }}/sources
-          MODEL: ${{ inputs.reviewer-model }}
-          GEMINI_API_KEY: ${{ secrets.gemini-api-key }}
+          REVIEWER_AGENT: ${{ inputs.reviewer-agent }}
+          # A Claude reviewer uses the researcher's model; each job gets only the credential its agent needs.
+          MODEL: ${{ inputs.reviewer-agent == 'claude' && inputs.researcher-model || inputs.reviewer-model }}
+          GEMINI_API_KEY: ${{ inputs.reviewer-agent != 'claude' && secrets.gemini-api-key || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.reviewer-agent == 'claude' && secrets.claude-oauth-token || '' }}
         run: bash factory/scripts/research/run-agent.sh reviewer review 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -299,8 +307,11 @@ jobs:
           FACTORY: ${{ github.workspace }}/factory
           PROJECT: ${{ github.workspace }}/project
           SNAPSHOTS: ${{ runner.temp }}/sources
-          MODEL: ${{ inputs.reviewer-model }}
-          GEMINI_API_KEY: ${{ secrets.gemini-api-key }}
+          REVIEWER_AGENT: ${{ inputs.reviewer-agent }}
+          # A Claude reviewer uses the researcher's model; each job gets only the credential its agent needs.
+          MODEL: ${{ inputs.reviewer-agent == 'claude' && inputs.researcher-model || inputs.reviewer-model }}
+          GEMINI_API_KEY: ${{ inputs.reviewer-agent != 'claude' && secrets.gemini-api-key || '' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.reviewer-agent == 'claude' && secrets.claude-oauth-token || '' }}
         run: bash factory/scripts/research/run-agent.sh reviewer review 2
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -355,6 +366,7 @@ jobs:
           MODEL: ${{ inputs.researcher-model }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.claude-oauth-token }}
           ROUNDS: ${{ needs.prepare.outputs.rounds }}
+          REVIEWER_AGENT: ${{ inputs.reviewer-agent }}
         run: bash factory/scripts/research/run-agent.sh researcher report "$ROUNDS"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
