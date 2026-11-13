@@ -24,7 +24,7 @@ them to the project's `docs/REQUIREMENTS.md`.
 | --- | --- | --- | --- |
 | Manager | Human owner | Approves contracts, decides on findings | |
 | Researcher (A) | Claude Code, Claude Opus 5.5 | `claims/`, `responses/`, evidence with `author: researcher`, reports | Record a verdict on its own claims |
-| Reviewer (B) | Gemini CLI, Gemini Flash model | `reviews/`, evidence with `author: reviewer` | Edit or delete anything |
+| Reviewer (B) | Antigravity CLI, Gemini Flash model, free-tier `GEMINI_API_KEY` | `reviews/`, evidence with `author: reviewer` | Edit or delete anything |
 
 Both agents must run on a subscription or a free tier, never a pay-per-token
 API (`GOVERNANCE.md`, Spending).
