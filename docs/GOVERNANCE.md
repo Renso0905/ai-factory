@@ -51,7 +51,9 @@ requests), then require one approving review and code-owner review.
   Gemini (Antigravity CLI) through a free-tier key from a Google Cloud
   project with no billing account. AI Studio must show that project as
   "Free tier"; never choose "Set up billing" or start a Google Cloud trial
-  for it. Each project stores the key as its `GEMINI_API_KEY` secret. When a quota runs out, the run fails; it never moves to
+  for it. Each project stores the key as its `GEMINI_API_KEY` secret.
+- These agent secrets are passed only to the research workflow's agent jobs,
+  never to `project-ci.yml`, and only when the owner starts a study by hand. When a quota runs out, the run fails; it never moves to
   pay-per-token billing. A paid API key or plan needs the owner's explicit
   approval.
 - Every job has a timeout. The worker stops after 3 failed attempts per check.

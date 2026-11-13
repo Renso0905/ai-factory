@@ -5,8 +5,9 @@ reviewed. Projects keep their studies under `research/`. The rules in this
 file marked **(enforced)** are checked by `scripts/policy-check.ts`
 (`STANDARDS.md`, rules R001 to R003). Everything else is process.
 
-Status: the research contract, the evidence schema and append-only storage
-are implemented. The agent workflows and GitHub orchestration come next.
+Status: the contract, evidence schema, append-only storage, both agents and
+the GitHub Actions pipeline are implemented. The first pilot study has not run
+yet.
 
 ## Principle
 
@@ -148,23 +149,59 @@ and anything still `unknown` after the last round go to the manager.
 
 ## Process
 
-1. The manager asks for a study. The researcher drafts `contract.v1.json`, and
-   the manager approves it by merging the pull request that adds it.
-2. The researcher adds evidence and claims (round 1) and opens a pull request.
-3. The reviewer adds evidence and one review per claim in the same pull request.
-4. The researcher responds, adding new claim versions where it revises (round 2).
-5. The reviewer reviews the new versions. Stop after `maxReviewRounds`.
-6. The researcher writes `report.v1.md`: established findings, disagreements,
-   unknowns, gaps and recommendations, each citing claim ids.
-7. The manager merges the study and decides which recommendations to adopt.
+1. The manager asks for a study. A `contract.v1.json` is drafted, and the
+   manager approves it by merging the pull request that adds it.
+2. The manager starts the project's **Research** workflow (Actions tab → Run
+   workflow) with the study id. Nothing runs automatically.
+3. The pipeline in `.github/workflows/research.yml` runs, one job per step:
+   1. Researcher, round 1: evidence and claims.
+   2. Reviewer, round 1: its own evidence and one review per claim.
+   3. Researcher, round 2: responses, and new claim versions where it revises.
+   4. Reviewer, round 2: reviews of the new versions and disputed claims.
+   5. Researcher: `report.v1.md` with established findings, disagreements,
+      unknowns, gaps and recommendations, each citing claim ids.
+
+   Steps 3 and 4 run only when the contract's `maxReviewRounds` is 2. The
+   pipeline supports at most 2 rounds.
+4. The publish job pushes a branch `research/<study>-<run id>`, and the run
+   summary links to open it as a pull request. The pull request runs the normal
+   factory checks.
+5. The manager reads the report, merges the study and decides which
+   recommendations to adopt.
 
 If the researcher finds something valuable outside the contract, it notes it
 in the report as a possible future study. It does not investigate it.
 
+## How the pipeline enforces the rules
+
+| Control | How |
+| --- | --- |
+| Each agent writes only its own record types | After each agent, `scripts/research-guard.ts` compares the study with a snapshot taken before the run. The researcher may only add claims, responses, reports and `author: researcher` evidence. The reviewer may only add reviews and `author: reviewer` evidence. Any change to an existing file fails the job (G001) |
+| Sources are really retrieved | Agents fetch pages only through `scripts/research-fetch.ts`, which saves the bytes outside the repository and logs url and sha256. Every url evidence record must match a retrieval logged in the same job (G001) |
+| Records are valid | The guard also runs R002 and R003. The agents run the guard themselves before finishing |
+| Agents cannot change the judge | The factory checkout is made read-only before an agent runs. Tool permissions only allow writing in the study folder and running the fetch and guard tools |
+| Credentials are separated | Researcher jobs get only the Claude token, reviewer jobs only the Gemini key. Agent jobs have a read-only `GITHUB_TOKEN` |
+| History is preserved | Only the publish job can push. It runs no agent, pushes a new branch, never `main`, and re-runs the full policy check (R001 to R003) first |
+| Bounded effort | Each agent job has a time limit (45 minutes). Two review rounds at most |
+
+Raw page snapshots are kept as workflow artifacts for 30 days, not in the
+repository.
+
+## Credentials
+
+| Secret (in the project) | For | Cost |
+| --- | --- | --- |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Researcher, from `claude setup-token` | Counts against the owner's Claude subscription. Keep extra usage off |
+| `GEMINI_API_KEY` | Reviewer, Antigravity CLI | Free tier. The key's project must have no billing account |
+
+When a quota runs out, the job fails and the study stops. Nothing is billed.
+
 ## What is not enforced yet
 
-- `author` is declared by the agent itself. V1 has one GitHub identity, so a
-  rule cannot tell which agent wrote a file. When the agents run in separate
-  workflow jobs, each job will only be able to write its own record types.
 - Whether a source really supports a claim is judged by the reviewer and the
   manager, not by a script.
+- Prompt injection: a competitor page could contain instructions aimed at an
+  agent. The tool limits and the guard confine the damage to records in the
+  study, and the manager reviews the pull request before anything merges.
+- The reviewer's model is whatever the `reviewer-model` input names. Each
+  reviewer run lists the models the key can use.
