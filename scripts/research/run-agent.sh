@@ -36,6 +36,14 @@ PROMPT="$(sed "s|\$FACTORY|$FACTORY|g" "$FACTORY/worker/research/$ROLE.md")
 - Study folder: research/$STUDY (the contract is the latest contract.vN.json there).
 - Task: $TASK_TEXT"
 
+# The agent's full event stream (tool calls, refusals, errors), kept as an artifact.
+AGENT_LOG="${AGENT_LOG:-$RUNNER_TEMP/agent-log.jsonl}"
+show_log_tail() {
+  echo "::group::Last agent events (full log in the agent-log artifact)"
+  tail -n 40 "$AGENT_LOG" 2>/dev/null | cut -c1-400 || true
+  echo "::endgroup::"
+}
+
 cd "$PROJECT"
 FETCH="node $FACTORY/scripts/research-fetch.ts"
 CHECK="node $FACTORY/scripts/research-guard.ts"
@@ -50,7 +58,14 @@ if [[ "$ROLE" == researcher ]]; then
     --allowedTools "Read" "Glob" "Grep" "WebSearch" "WebFetch" \
       "Write(research/$STUDY/**)" "Edit(research/$STUDY/**)" \
       "Bash($FETCH:*)" "Bash($CHECK)" \
-    --output-format text
+    --output-format stream-json --verbose > "$AGENT_LOG" || { show_log_tail; exit 1; }
+  # The last stream event is the final result; print its text for the job log.
+  node -e '
+    const lines = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n");
+    const last = JSON.parse(lines[lines.length - 1] || "{}");
+    console.log(last.result ?? "(no final result in the agent log)");
+    if (last.is_error) process.exit(1);
+  ' "$AGENT_LOG" || { show_log_tail; exit 1; }
 elif [[ "$ROLE" == reviewer ]]; then
   : "${GEMINI_API_KEY:?GEMINI_API_KEY secret is missing}"
   curl -fsSL https://antigravity.google/cli/install.sh | bash >/dev/null
@@ -78,8 +93,17 @@ elif [[ "$ROLE" == reviewer ]]; then
   }
 }
 JSON
-  echo "Models available to the reviewer:"; agy models || true
-  agy -p "$PROMPT" ${MODEL:+--model "$MODEL"} --print-timeout 40m --output-format text
+  # An unknown model must fail at once, not leave the agent retrying until the timeout.
+  MODELS="$(agy models)"
+  if [[ -z "${MODEL:-}" ]] || ! cut -f1 <<<"$MODELS" | grep -qxF "$MODEL"; then
+    echo "::error::Reviewer model '${MODEL:-}' is not available. Choose one of these (first column):" >&2
+    echo "$MODELS" >&2
+    exit 1
+  fi
+  echo "Reviewer model: $MODEL"
+  agy -p "$PROMPT" --model "$MODEL" --print-timeout 35m --output-format stream-json > "$AGENT_LOG" \
+    || { show_log_tail; exit 1; }
+  tail -c 4000 "$AGENT_LOG"; echo
 else
   echo "Unknown role $ROLE" >&2; exit 2
 fi

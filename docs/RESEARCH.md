@@ -169,6 +169,18 @@ and anything still `unknown` after the last round go to the manager.
 5. The manager reads the report, merges the study and decides which
    recommendations to adopt.
 
+**When a step fails**, start the workflow again with `resume-run` set to the
+failed run's id and `resume-at` set to the step to retry (`review-1`,
+`respond`, `review-2` or `report`). The run continues from that run's saved
+study, so earlier agent steps are not repeated. The saved study must still
+contain every merged record unchanged. Each agent job keeps its full event
+stream (tool calls, refusals, errors) as an `agent-log-*` artifact for 30
+days.
+
+The reviewer's model must be an id that Antigravity CLI lists (for example
+`gemini-3.8-flash-medium`). An unknown id fails the step at once and prints
+the available ones.
+
 If the researcher finds something valuable outside the contract, it notes it
 in the report as a possible future study. It does not investigate it.
 

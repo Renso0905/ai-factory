@@ -1,9 +1,10 @@
 # Market-intelligence study pipeline (docs/RESEARCH.md). Projects call it from a
 # manually started workflow:
 #   jobs:
-#     research:
+#     study:
 #       permissions:
 #         contents: write
+#         actions: read
 #       uses: Renso0905/ai-factory/.github/workflows/research.yml@v1
 #       with:
 #         study: <study id with an approved contract on the default branch>
@@ -13,9 +14,11 @@
 #
 # Researcher (Claude) and reviewer (Gemini via Antigravity CLI) take turns:
 # research -> review 1 -> respond -> review 2 -> report (round 2 only when the
-# contract allows two rounds). Each agent job has a read-only token and only its
-# own credential. The study is handed between jobs as an artifact. Only the last
-# job may push, and it pushes a new branch for the owner to open as a pull request.
+# contract allows two rounds). A run can resume from the saved study of an
+# earlier run at a chosen step, so a failed step is retried without repeating
+# the ones before it. Each agent job has a read-only token and only its own
+# credential. Only the last job may push, and it pushes a new branch for the
+# owner to open as a pull request.
 name: Research study (reusable)
 
 on:
@@ -30,7 +33,15 @@ on:
         type: string
         default: claude-opus-5-5
       reviewer-model:
-        description: Gemini model slug for the reviewer (see the "Models available" list in a run log). Empty uses the CLI default.
+        description: Antigravity model id for the reviewer, as listed by `agy models` (for example gemini-3.8-flash-medium).
+        type: string
+        default: gemini-3.8-flash-medium
+      resume-run:
+        description: Optional. Run id of an earlier study run whose saved study to continue from.
+        type: string
+        default: ''
+      resume-at:
+        description: With resume-run, the first step to run again (review-1, respond, review-2 or report).
         type: string
         default: ''
       factory-ref:
@@ -60,31 +71,40 @@ jobs:
     name: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       rounds: ${{ steps.contract.outputs.rounds }}
+      start: ${{ steps.contract.outputs.start }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: project
           persist-credentials: false
+      - name: Download the study from the run being resumed
+        if: inputs.resume-run != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: study-state
+          run-id: ${{ inputs.resume-run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/resume
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Renso0905/ai-factory
+          ref: ${{ inputs.factory-ref }}
+          path: factory
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
       - name: Check the study and read its contract
         id: contract
-        working-directory: project
-        run: |
-          node --input-type=module -e '
-            import { readdirSync, readFileSync, appendFileSync } from "node:fs";
-            const study = process.env.STUDY;
-            if (!/^[a-z0-9][a-z0-9-]{2,79}$/.test(study)) throw new Error("Invalid study id.");
-            const dir = `research/${study}`;
-            const files = readdirSync(dir, { recursive: true }).map(String);
-            const versions = files.map((f) => /^contract\.v(\d+)\.json$/.exec(f)).filter(Boolean).map((m) => Number(m[1]));
-            if (versions.length === 0) throw new Error(`No approved contract in ${dir}. Merge contract.v1.json first.`);
-            if (files.some((f) => f.startsWith("claims"))) throw new Error(`${dir} already has claims. This pipeline starts a new study.`);
-            const contract = JSON.parse(readFileSync(`${dir}/contract.v${Math.max(...versions)}.json`, "utf8"));
-            const rounds = Math.min(2, Math.max(1, Number(contract.maxReviewRounds) || 1));
-            appendFileSync(process.env.GITHUB_OUTPUT, `rounds=${rounds}\n`);
-            console.log(`Study ${study}: contract v${Math.max(...versions)}, ${rounds} review round(s).`);
-          '
+        env:
+          RESUME_RUN: ${{ inputs.resume-run }}
+          RESUME_AT: ${{ inputs.resume-at }}
+        run: node factory/scripts/research-prepare.ts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: study-state
@@ -94,6 +114,7 @@ jobs:
   research:
     name: researcher round 1
     needs: prepare
+    if: ${{ !cancelled() && !failure() && fromJSON(needs.prepare.outputs.start) <= 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -131,6 +152,13 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
+          name: agent-log-researcher-1
+          path: ${{ runner.temp }}/agent-log.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
           name: sources-researcher-1
           path: ${{ runner.temp }}/sources
           if-no-files-found: ignore
@@ -138,7 +166,8 @@ jobs:
 
   review-1:
     name: reviewer round 1
-    needs: research
+    needs: [prepare, research]
+    if: ${{ !cancelled() && !failure() && fromJSON(needs.prepare.outputs.start) <= 2 }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -176,6 +205,13 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
+          name: agent-log-reviewer-1
+          path: ${{ runner.temp }}/agent-log.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
           name: sources-reviewer-1
           path: ${{ runner.temp }}/sources
           if-no-files-found: ignore
@@ -184,7 +220,7 @@ jobs:
   respond:
     name: researcher round 2
     needs: [prepare, review-1]
-    if: needs.prepare.outputs.rounds == '2'
+    if: ${{ !cancelled() && !failure() && fromJSON(needs.prepare.outputs.start) <= 3 && needs.prepare.outputs.rounds == '2' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -222,6 +258,13 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
+          name: agent-log-researcher-2
+          path: ${{ runner.temp }}/agent-log.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
           name: sources-researcher-2
           path: ${{ runner.temp }}/sources
           if-no-files-found: ignore
@@ -229,7 +272,8 @@ jobs:
 
   review-2:
     name: reviewer round 2
-    needs: respond
+    needs: [prepare, respond]
+    if: ${{ !cancelled() && !failure() && fromJSON(needs.prepare.outputs.start) <= 4 && needs.prepare.outputs.rounds == '2' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -267,6 +311,13 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
+          name: agent-log-reviewer-2
+          path: ${{ runner.temp }}/agent-log.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
           name: sources-reviewer-2
           path: ${{ runner.temp }}/sources
           if-no-files-found: ignore
@@ -274,8 +325,8 @@ jobs:
 
   report:
     name: researcher report
-    needs: [prepare, review-1, review-2]
-    if: ${{ !cancelled() && needs.review-1.result == 'success' && (needs.review-2.result == 'success' || (needs.review-2.result == 'skipped' && needs.prepare.outputs.rounds == '1')) }}
+    needs: [prepare, review-2]
+    if: ${{ !cancelled() && !failure() && fromJSON(needs.prepare.outputs.start) <= 5 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -311,12 +362,20 @@ jobs:
           path: project/research/${{ inputs.study }}
           overwrite: true
           retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agent-log-report
+          path: ${{ runner.temp }}/agent-log.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
 
   # The only job with write access. It runs no agent and re-checks the whole
   # study with a fresh copy of the factory before pushing a branch.
   publish:
     name: publish
     needs: report
+    if: ${{ !cancelled() && needs.report.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
