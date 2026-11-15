@@ -21,9 +21,15 @@ mkdir -p "$SNAPSHOTS"
 chmod -R a-w "$FACTORY"
 
 node "$FACTORY/scripts/research-guard.ts" --snapshot
-CLAIMS_BEFORE=$(find "$PROJECT/research/$STUDY/claims" -type f -name '*.json' 2>/dev/null | wc -l)
-REVIEWS_BEFORE=$(find "$PROJECT/research/$STUDY/reviews" -type f -name '*.json' 2>/dev/null | wc -l)
-REPORTS_BEFORE=$(find "$PROJECT/research/$STUDY" -maxdepth 1 -type f -name 'report.v*.md' 2>/dev/null | wc -l)
+# Files matching a pattern in one study folder; a folder that does not exist yet has none.
+# (Under set -e and pipefail, a bare find on a missing folder would end the script.)
+count() {
+  local dir="$PROJECT/research/$STUDY/$1"
+  if [[ -d "$dir" ]]; then find "$dir" -maxdepth 1 -type f -name "$2" | wc -l; else echo 0; fi
+}
+CLAIMS_BEFORE=$(count claims '*.json')
+REVIEWS_BEFORE=$(count reviews '*.json')
+REPORTS_BEFORE=$(count . 'report.v*.md')
 
 case "$TASK" in
   research) TASK_TEXT="Round 1: research the feature in the contract and add evidence and claims (round 1). Then stop.";;
@@ -139,12 +145,11 @@ echo "::endgroup::"
 # An agent can finish "successfully" without writing anything (for example when
 # its writes were refused). A step that must produce records fails without them,
 # so later steps never run on an empty review.
-count() { find "$PROJECT/research/$STUDY/$1" -type f -name "$2" 2>/dev/null | wc -l; }
 case "$TASK" in
   research) NEW=$(( $(count claims '*.json') - CLAIMS_BEFORE )); WHAT="claims";;
   review)   NEW=$(( $(count reviews '*.json') - REVIEWS_BEFORE )); WHAT="reviews"
             # Round 2 has work only if the researcher revised or disputed something.
-            if (( ROUND > 1 )) && [[ -z "$(find "$PROJECT/research/$STUDY/claims" -name 'C-*.v[2-9]*.json' 2>/dev/null)" ]] \
+            if (( ROUND > 1 )) && (( $(count claims '*.json') == $(count claims 'C-*.v1.json') )) \
                && ! grep -qs '"disputed"' "$PROJECT/research/$STUDY/responses/"*.json; then NEW=1; fi;;
   report)   NEW=$(( $(count . 'report.v*.md') - REPORTS_BEFORE )); WHAT="report";;
   *)        NEW=1;;
