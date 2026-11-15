@@ -25,10 +25,25 @@ them to the project's `docs/REQUIREMENTS.md`.
 | --- | --- | --- | --- |
 | Manager | Human owner | Approves contracts, decides on findings | |
 | Researcher (A) | Claude Code, Claude Opus 5.5 | `claims/`, `responses/`, evidence with `author: researcher`, reports | Record a verdict on its own claims |
-| Reviewer (B) | Antigravity CLI, Gemini Flash model, free-tier `GEMINI_API_KEY` | `reviews/`, evidence with `author: reviewer` | Edit or delete anything |
+| Reviewer (B) | Antigravity CLI, Gemini Flash model, free-tier `GEMINI_API_KEY`; Claude when the manager chooses it for a run | `reviews/`, evidence with `author: reviewer` | Edit or delete anything |
 
 Both agents must run on a subscription or a free tier, never a pay-per-token
 API (`GOVERNANCE.md`, Spending).
+
+### Claude as the reviewer (fallback)
+
+When Gemini is unavailable (for example, Google returns "high demand" errors
+on the free tier), the manager can start a run with `reviewer-agent: claude`.
+The reviewer then runs as a separate Claude session with the researcher's
+model, the same reviewer instructions and the same write limits, and the guard
+checks it exactly as it checks Gemini. It uses the Claude subscription instead
+of the Gemini key.
+
+This review is **not independent**: the same model family made the claims, so
+it tends to share their blind spots. The report says at the top that Claude
+reviewed the study. Prefer Gemini whenever it works. When resuming a run, set
+`reviewer-agent` to the agent that made the reviews, so the report states it
+correctly.
 
 ## Modes
 
@@ -192,7 +207,7 @@ in the report as a possible future study. It does not investigate it.
 | Sources are really retrieved | Agents fetch pages only through `scripts/research-fetch.ts`, which saves the bytes outside the repository and logs url and sha256. Every url evidence record must match a retrieval logged in the same job (G001) |
 | Records are valid | The guard also runs R002 and R003. The agents run the guard themselves before finishing |
 | Agents cannot change the judge | The factory checkout is made read-only before an agent runs. Tool permissions only allow writing in the study folder and running the fetch and guard tools |
-| Credentials are separated | Researcher jobs get only the Claude token, reviewer jobs only the Gemini key. Agent jobs have a read-only `GITHUB_TOKEN` |
+| Credentials are separated | Researcher jobs get only the Claude token. Reviewer jobs get only the Gemini key, or only the Claude token when `reviewer-agent` is `claude`. Agent jobs have a read-only `GITHUB_TOKEN` |
 | History is preserved | Only the publish job can push. It runs no agent, pushes a new branch, never `main`, and re-runs the full policy check (R001 to R003) first |
 | Bounded effort | Each agent job has a time limit (45 minutes). Two review rounds at most |
 
@@ -203,7 +218,7 @@ repository.
 
 | Secret (in the project) | For | Cost |
 | --- | --- | --- |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Researcher, from `claude setup-token` | Counts against the owner's Claude subscription. Keep extra usage off |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Researcher (and a Claude reviewer), from `claude setup-token` | Counts against the owner's Claude subscription. Keep extra usage off |
 | `GEMINI_API_KEY` | Reviewer, Antigravity CLI | Free tier. The key's project must have no billing account |
 
 When a quota runs out, the job fails and the study stops. Nothing is billed.
@@ -217,3 +232,7 @@ When a quota runs out, the job fails and the study stops. Nothing is billed.
   study, and the manager reviews the pull request before anything merges.
 - The reviewer's model is whatever the `reviewer-model` input names. Each
   reviewer run lists the models the key can use.
+- Independence of a Claude review. The guard limits what a Claude reviewer
+  may write, but nothing can make it judge its own model family's claims
+  independently. Only the report's notice and the manager's judgement cover
+  this.
