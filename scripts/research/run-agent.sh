@@ -21,6 +21,9 @@ mkdir -p "$SNAPSHOTS"
 chmod -R a-w "$FACTORY"
 
 node "$FACTORY/scripts/research-guard.ts" --snapshot
+CLAIMS_BEFORE=$(find "$PROJECT/research/$STUDY/claims" -type f -name '*.json' 2>/dev/null | wc -l)
+REVIEWS_BEFORE=$(find "$PROJECT/research/$STUDY/reviews" -type f -name '*.json' 2>/dev/null | wc -l)
+REPORTS_BEFORE=$(find "$PROJECT/research/$STUDY" -maxdepth 1 -type f -name 'report.v*.md' 2>/dev/null | wc -l)
 
 case "$TASK" in
   research) TASK_TEXT="Round 1: research the feature in the contract and add evidence and claims (round 1). Then stop.";;
@@ -65,10 +68,13 @@ if [[ "$AGENT" == claude ]]; then
   : "${CLAUDE_CODE_OAUTH_TOKEN:?CLAUDE_CODE_OAUTH_TOKEN secret is missing}"
   if [[ "$ROLE" == reviewer ]]; then
     # Same write limits as the Gemini reviewer: reviews and its own evidence only.
-    WRITABLE=("Write(research/$STUDY/reviews/**)" "Write(research/$STUDY/evidence/**)")
+    # Claude Code checks every file write (Write and Edit) against Edit(path) rules;
+    # Write(path) rules are never matched. Changes to existing files are still
+    # refused by the guard (G001).
+    WRITABLE=("Edit(research/$STUDY/reviews/**)" "Edit(research/$STUDY/evidence/**)")
     echo "Reviewer: Claude (${MODEL:-claude-opus-5-5}). The review is not independent of the researcher's model family."
   else
-    WRITABLE=("Write(research/$STUDY/**)" "Edit(research/$STUDY/**)")
+    WRITABLE=("Edit(research/$STUDY/**)")
   fi
   npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" >/dev/null
   # dontAsk: anything not listed below is refused, never prompted.
@@ -129,3 +135,22 @@ fi
 echo "::group::Research guard"
 node "$FACTORY/scripts/research-guard.ts"
 echo "::endgroup::"
+
+# An agent can finish "successfully" without writing anything (for example when
+# its writes were refused). A step that must produce records fails without them,
+# so later steps never run on an empty review.
+count() { find "$PROJECT/research/$STUDY/$1" -type f -name "$2" 2>/dev/null | wc -l; }
+case "$TASK" in
+  research) NEW=$(( $(count claims '*.json') - CLAIMS_BEFORE )); WHAT="claims";;
+  review)   NEW=$(( $(count reviews '*.json') - REVIEWS_BEFORE )); WHAT="reviews"
+            # Round 2 has work only if the researcher revised or disputed something.
+            if (( ROUND > 1 )) && [[ -z "$(find "$PROJECT/research/$STUDY/claims" -name 'C-*.v[2-9]*.json' 2>/dev/null)" ]] \
+               && ! grep -qs '"disputed"' "$PROJECT/research/$STUDY/responses/"*.json; then NEW=1; fi;;
+  report)   NEW=$(( $(count . 'report.v*.md') - REPORTS_BEFORE )); WHAT="report";;
+  *)        NEW=1;;
+esac
+if (( NEW < 1 )); then
+  echo "::error::The $ROLE added no $WHAT in this step. See the agent-log artifact for refusals or errors." >&2
+  show_log_tail
+  exit 1
+fi
