@@ -114,6 +114,7 @@ test('secrets: token-shaped strings are flagged without echoing the value (S001)
     'github' + '_pat_' + 'B'.repeat(60),
     'sk-' + 'ant-' + 'c'.repeat(30),
     'AK' + 'IA' + 'D'.repeat(16),
+    'AI' + 'za' + 'Sy' + 'x'.repeat(33),
     '-----BEGIN RSA ' + 'PRIVATE KEY-----',
   ];
   for (const fake of fakes) {
@@ -125,6 +126,7 @@ test('secrets: token-shaped strings are flagged without echoing the value (S001)
 
 test('secrets: ordinary text is not flagged', () => {
   assert.deepEqual(checkSecretsInText('a.md', 'Store tokens in GitHub secrets, e.g. secrets.GITHUB_TOKEN.'), []);
+  assert.deepEqual(checkSecretsInText('a.ts', 'const k = "AIzaShort";'), []);
 });
 
 test('secrets: credential file names are flagged, .env.example is allowed (S002)', () => {
